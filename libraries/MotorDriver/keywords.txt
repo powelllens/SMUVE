@@ -1,0 +1,27 @@
+####################################################
+# Datatypes (KEYWORD1)
+####################################################
+
+MotorDriver	KEYWORD1
+
+
+####################################################
+# Methods and Functions (KEYWORD2)
+####################################################
+MotorDriver	KEYWORD2
+ComputeMotorOutputs KEYWORD2
+
+####################################################
+# Constants and enums (LITERAL1)
+####################################################
+OFF	LITERAL1
+LED1	LITERAL1
+LED2	LITERAL1
+LED3	LITERAL1
+LED4	LITERAL1
+LED5	LITERAL1
+LED6	LITERAL1
+LED7	LITERAL1
+LED8	LITERAL1
+LED9	LITERAL1
+LED10	LITERAL1
