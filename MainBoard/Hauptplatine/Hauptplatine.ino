@@ -596,7 +596,7 @@ void loop(){
         //Block Motor 2
         Serial.print(BackLeftBlock);
         Serial.print(";");
-        Serial.println(BackReightBlock);
+        Serial.println(BackRightBlock);
         break;
         return;
       case 0x52: // R
