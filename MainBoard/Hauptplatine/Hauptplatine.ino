@@ -1,8 +1,6 @@
 /*
- Example sketch for the PS3 Bluetooth library - developed by Kristian Lauszus
- For more information visit my blog: http://blog.tkjelectronics.dk/ or
- send me an e-mail:  kristianl@tkjelectronics.com
- */
+
+*/
 
 #include <avr/wdt.h>
 byte MainBoardMode = 0;
@@ -20,7 +18,7 @@ byte MainBoardMode = 0;
 //  
 //    PS3.getButtonClick(TRIANGLE)
 //    PS3.getButtonClick(CIRCLE)
-//    PS3.getButtonClick(CROSS
+//    PS3.getButtonClick(CROSS)
 //    PS3.getButtonClick(SQUARE)
 //
 //    PS3.setRumbleOn(RumbleLow)
@@ -52,6 +50,7 @@ PS3BT PS3(&Btd); // This will just create the instance
 
 //Stuff needed for PS3 controller
 byte LeftY,RightY,LeftX;
+byte Speeddivider;
 
 void SetupLED(){
   PS3.setLedOff();
@@ -79,8 +78,24 @@ byte receivedCommands[MAX_RECIEVE_BYTES];
 //**********************************************************************************************
 // Stuff needed for Ultrasonic Modul
 #define ULTRASONIC_ADDRESS  0x09
-byte MinFrontDistance;
-byte MinBackDistance;
+byte MinFrontDistanceRight;
+byte MinFrontDistanceLeft;
+
+byte MinBackDistanceRight;
+byte MinBackDistanceLeft;
+
+bool FrontRightBlock;
+bool FrontLeftBlock;
+
+bool BackRightBlock;
+bool BackLeftBlock;
+
+const int MinMotorSpeed = 15;
+const byte SmallestDistanceToMove = 10; //Pulse
+const byte SmallestDistanceToObject = 30; //cm
+const byte MaxDistanceToObject = 160; //cm
+const int DeltaDistanceToObject = MaxDistanceToObject - SmallestDistanceToObject; //cm
+double Distancebuffer;
 
 void GetSensorDistances(){
   //Send Byte 0x00 to prepare for recieve
@@ -97,21 +112,72 @@ void GetSensorDistances(){
     receivedCommands[a] = Wire.read(); // receive a byte as character
     a++;
   }
-  MinFrontDistance = receivedCommands[0];
-  for (int c = 1; c < 6; c++){
-    if (receivedCommands[c] < MinFrontDistance){
-      MinFrontDistance = receivedCommands[c];
-    }
-  } 
-  MinBackDistance = receivedCommands[5];
-  for (int c = 6; c < 10; c++){
-    if (receivedCommands[c] < MinBackDistance){
-      MinBackDistance = receivedCommands[c];
+  
+  MinFrontDistanceLeft = receivedCommands[0];
+  for (int c = 1; c < 3; c++){
+    if (receivedCommands[c] < MinFrontDistanceLeft){
+      MinFrontDistanceLeft = receivedCommands[c];
     }
   }
-//  Serial.print(MinFrontDistance);
-//  Serial.print(" - ");
-//  Serial.println(MinBackDistance);
+  
+  MinFrontDistanceRight = receivedCommands[3];
+  for (int c = 4; c < 6; c++){
+    if (receivedCommands[c] < MinFrontDistanceRight){
+      MinFrontDistanceRight = receivedCommands[c];
+    }
+  }
+
+  MinBackDistanceRight = receivedCommands[6];
+  for (int c = 7; c < 8; c++){
+    if (receivedCommands[c] < MinBackDistanceRight){
+      MinBackDistanceRight = receivedCommands[c];
+    }
+  }
+
+  MinBackDistanceLeft = receivedCommands[8];
+  for (int c = 9; c < 10; c++){
+    if (receivedCommands[c] < MinBackDistanceLeft){
+      MinBackDistanceLeft = receivedCommands[c];
+    }
+  }
+  
+/*
+ 0 1 2 | 3 4 5
+    *******
+  ***     ***
+ *           *
+ *           *
+8*           *6
+9*************7
+*/
+
+  if (MinBackDistanceLeft < SmallestDistanceToObject) {
+    BackLeftBlock = true;
+  }
+  else {
+    BackLeftBlock = false;
+  }
+  
+  if (MinBackDistanceRight < SmallestDistanceToObject) {
+    BackRightBlock = true;
+  }
+  else {
+    BackRightBlock = false;
+  }
+  
+  if (MinFrontDistanceLeft < SmallestDistanceToObject) {
+    FrontLeftBlock = true;
+  }
+  else {
+    FrontLeftBlock = false;
+  }
+  
+  if (MinFrontDistanceRight < SmallestDistanceToObject) {
+    FrontRightBlock = true;
+  }
+  else {
+    FrontRightBlock = false;
+  }
 }
 
 //**********************************************************************************************
@@ -121,12 +187,14 @@ byte modeRegister = 0;
 
 double Motor1Moved;
 bool Motot1Enabled;
+bool Motor1Active;
 bool Motor1Direction;
 byte Motor1Speed;
 double Motor1SpeedDouble;
 
 double Motor2Moved;
 bool Motor2Enabled;
+bool Motor2Active;
 bool Motor2Direction;
 byte Motor2Speed;
 double Motor2SpeedDouble;
@@ -135,12 +203,15 @@ double DistanzMotor1;
 double DistanzMotor2;
 double MotorDistanz1Error;
 double MotorDistanz2Error;
-byte MaxMotorSpeed;
 const byte MotorMaxCurrent = 0x64;
 bool MotorBusy;
 bool RecievedCommand;
 
-void GetMovedDistance(){
+int MaxMotorSpeedDelta;
+int MaxMotorSpeed;
+int CalculatedMaxMotorSpeed;
+
+void GetMovedDistanceAndMode(){
   //Send Byte 0x00 to prepare for recieve
   delayMicroseconds(20);
   Wire.beginTransmission(MOTORDRIVE_ADDRESS); // transmit to device #8
@@ -149,7 +220,7 @@ void GetMovedDistance(){
   
   //Request 4 Bytes
   delayMicroseconds(20);
-  Wire.requestFrom(MOTORDRIVE_ADDRESS, 4);    // request 4 bytes from slave device #0x08
+  Wire.requestFrom(MOTORDRIVE_ADDRESS, 5);    // request 5 bytes from slave device #0x08
   byte a = 0;
   while (Wire.available()) { // slave may send less than requested
     receivedCommands[a] = Wire.read(); // receive a byte as character
@@ -162,6 +233,12 @@ void GetMovedDistance(){
   word _Motor2moved = receivedCommands[2] << 8;
   _Motor2moved = _Motor2moved + receivedCommands[3];
   Motor2Moved = double(_Motor2moved);
+
+  if (bitRead(receivedCommands[4], 6) == 1){
+    MainBoardMode = 1;
+  }
+  Motor1Active = bitRead(receivedCommands[4], 0);
+  Motor2Active = bitRead(receivedCommands[4], 1);
 }
 
 void InitMotorModule(){
@@ -214,6 +291,20 @@ double Kd_D = 0;
 PID Motor1DistanzPID(&Motor1Moved, &Motor1SpeedDouble, &DistanzMotor1, Kp_D, Ki_D, Kd_D, P_ON_M, DIRECT);
 PID Motor2DistanzPID(&Motor2Moved, &Motor2SpeedDouble, &DistanzMotor2, Kp_D, Ki_D, Kd_D, P_ON_M, DIRECT);
 
+void ResetMovementDistanze(){
+  //Serial.println("final");
+  DistanzMotor1 = 0;
+  DistanzMotor1 = 0;
+  modeRegister = 0;
+  ResetMotorMovement();
+  GetMovedDistanceAndMode();
+  Motor1DistanzPID.SetMode(MANUAL);
+  Motor2DistanzPID.SetMode(MANUAL);
+  Motor1SpeedDouble = 0;
+  Motor2SpeedDouble = 0;
+  MotorBusy = false;
+}
+
 //**********************************************************************************************
 // Serial Communication
 String MsgString = "";
@@ -224,8 +315,8 @@ void serialEvent(){
   while (Serial.available()) {
     // get the new byte:
     char inChar = (char)Serial.read();
-    // add it to the inputString:
-    MsgString += inChar;
+    
+    MsgString += inChar; // add it to the inputString:
     // if the incoming character is a newline, set a flag so the main loop can
     // do something about it:
     if (inChar == '\n') {
@@ -275,6 +366,8 @@ void setup(){
     Serial.println("OSC did not start");
   }
   Serial.println("Start");
+
+  MainBoardMode = 0;
 }
 
 //**********************************************************************************************
@@ -284,37 +377,52 @@ void loop(){
   
   if (PS3.PS3Connected) {    
     if (MainBoardMode == 0){
-      MainBoardMode = 3;
+      MainBoardMode = 2;
       Motor1Direction = 0;
       Motor2Direction = 0;
+      Speeddivider = 3;
       PS3.setLedOff();
       PS3.setLedOn(LED1);
     }
     
     if (PS3.getButtonClick(TRIANGLE)){
-      MainBoardMode++;
-      if (MainBoardMode > 5){
-        MainBoardMode = 3;
+      if (MainBoardMode > 3){
+        MainBoardMode = 2;
+      }
+      else{
+        MainBoardMode++;
       }
       SetupLED();
     }
     
     if (PS3.getButtonClick(CIRCLE)){
-      MainBoardMode--;
       if (MainBoardMode < 3){
-        MainBoardMode = 5;
+        MainBoardMode = 4;
+      }
+      else{
+         MainBoardMode--;
       }
       SetupLED();
     }
+
+    if (PS3.getButtonClick(SELECT)){
+      if (Speeddivider < 2){
+        Speeddivider = 3;
+      }
+      else{
+         Speeddivider--;
+      }
+    }
       
     if (PS3.getButtonClick(PS)){
-      Serial.println("PS");
-      bitWrite(modeRegister, 0, 0);
-      bitWrite(modeRegister, 1, 0);
+      //Serial.println("PS");
+      modeRegister = 0;
+      Motor1Speed = 0;
+      Motor2Speed = 0;
       PS3.disconnect();
     }
 
-    if (MainBoardMode == 3){
+    if ((MainBoardMode == 2) && (MainBoardMode != 1)) {
       if (PS3.getAnalogHat(LeftHatY) > 137 || PS3.getAnalogHat(LeftHatY) < 117){
         LeftY = PS3.getAnalogHat(LeftHatY); 
         if (LeftY > 137) {
@@ -326,12 +434,13 @@ void loop(){
           LeftY = 117 - LeftY;
         }
         bitWrite(modeRegister, 0, 1);
-        Motor1Speed = LeftY;
-        if (Motor1Speed < 5){
-           Motor1Speed = 5;
+        Motor1Speed = LeftY / Speeddivider;
+        if (Motor1Speed < 6){
+           Motor1Speed = 6;
         }
       }
       else{
+        Motor1Speed = 0;
         bitWrite(modeRegister, 0, 0);
       }
       
@@ -346,16 +455,18 @@ void loop(){
           RightY = 117 - RightY;
         }
         bitWrite(modeRegister, 1, 1);
-        Motor2Speed = RightY;
-        if (Motor2Speed < 5){
-          Motor2Speed = 5;
+        Motor2Speed = RightY / Speeddivider;
+        if (Motor2Speed < 6){
+          Motor2Speed = 6;
         }
       }
       else{
+        Motor2Speed = 0;
         bitWrite(modeRegister, 1, 0);
-      } 
+      }
     }
-    else if (MainBoardMode == 4){
+    
+    else if (MainBoardMode == 3){
       
       LeftY = PS3.getAnalogHat(LeftHatY);
       LeftX = PS3.getAnalogHat(LeftHatX);
@@ -375,8 +486,8 @@ void loop(){
       else{
         bitWrite(modeRegister, 2, 1);
       }
-      Motor1Speed = abs(leftmtr);
-      if (Motor1Speed > 8){
+      Motor1Speed = abs(leftmtr) / Speeddivider;
+      if (Motor1Speed > 9){
         bitWrite(modeRegister, 0, 1);
       }
       else{
@@ -389,15 +500,16 @@ void loop(){
       else{
         bitWrite(modeRegister, 3, 0);
       }
-      Motor2Speed = abs(rightmtr);
-      if (Motor2Speed > 8){
+      Motor2Speed = abs(rightmtr) / Speeddivider;
+      if (Motor2Speed > 9){
         bitWrite(modeRegister, 1, 1);
       }
       else{
         bitWrite(modeRegister, 1, 0);
       }
     }
-    else if (MainBoardMode == 5){
+    
+    else if (MainBoardMode == 4){
       if (PS3.getButtonClick(L1)){
         Motor1Direction = not Motor1Direction;
         bitWrite(modeRegister, 2, Motor1Direction);
@@ -407,9 +519,8 @@ void loop(){
         bitWrite(modeRegister, 3, Motor2Direction);
       }
       
-      Motor1Speed = PS3.getAnalogButton(L2);
+      Motor1Speed = PS3.getAnalogButton(L2) / Speeddivider;
       if (Motor1Speed > 5){
-        Motor1Speed = Motor1Speed / 2;
         bitWrite(modeRegister, 0, 1);
       }
       else{
@@ -417,9 +528,8 @@ void loop(){
         bitWrite(modeRegister, 0, 0);
       }
 
-      Motor2Speed = PS3.getAnalogButton(R2);
+      Motor2Speed = PS3.getAnalogButton(R2) / Speeddivider;
       if (Motor2Speed > 5){
-        Motor2Speed = Motor2Speed / 2;
         bitWrite(modeRegister, 1, 1);
       }
       else{
@@ -429,13 +539,15 @@ void loop(){
     }
   }
   else{
-    MainBoardMode = 0;
+    if (MainBoardMode != 1){
+      MainBoardMode = 0;
+    }
   }
   
   if (stringComplete){
     stringComplete = false;    
     // read the incoming byte:
-    Serial.println(MsgString);
+    //Serial.print(MsgString);
     if (MsgString.length() > 11){
       getValue(MsgString,';');
     }
@@ -449,7 +561,8 @@ void loop(){
 
     switch(MsgComp[0].charAt(0)){
       case 0x42: // B
-        if (MainBoardMode == 0){
+        if ((MainBoardMode == 0) && (not MotorBusy)){
+          //Serial.print("Start");
           DistanzMotor1 = MsgComp[1].toInt();
           Motor1Direction = MsgComp[2].toInt();
   
@@ -458,6 +571,11 @@ void loop(){
   
           MaxMotorSpeed = MsgComp[5].toInt();
 
+          //Debug Slow Down
+          if (MaxMotorSpeed > 60){
+            MaxMotorSpeed = 60;
+          }
+          
           RecievedCommand = true;
         }
         break;
@@ -471,14 +589,14 @@ void loop(){
         Serial.print(";");
 
         //Block Motor 1
-        Serial.print("0");
+        Serial.print(FrontLeftBlock);
         Serial.print(";");
-        Serial.print("0");
+        Serial.print(FrontRightBlock);
         Serial.print(";");
         //Block Motor 2
-        Serial.print("0");
+        Serial.print(BackLeftBlock);
         Serial.print(";");
-        Serial.println("0");
+        Serial.println(BackReightBlock);
         break;
         return;
       case 0x52: // R
@@ -491,38 +609,76 @@ void loop(){
     }
   }
 
+  GetMovedDistanceAndMode();
+  GetSensorDistances();
+  
   if (RecievedCommand){
     RecievedCommand = false;
     ResetMotorMovement();
-    MotorBusy = true;
     
-    if(DistanzMotor1 > 10){
+    MotorBusy = true;
+    if(SmallestDistanceToMove > 10){
       bitWrite(modeRegister, 0, 1);
       bitWrite(modeRegister, 2, Motor1Direction);
+      Motor1DistanzPID.SetMode(AUTOMATIC);
     }
     else{
+      DistanzMotor1 = 0;
       bitWrite(modeRegister, 0, 0);
     }
     
-    if(DistanzMotor2 > 10){
+    if(SmallestDistanceToMove > 10){
       bitWrite(modeRegister, 1, 1);
       bitWrite(modeRegister, 3, Motor2Direction);
+      Motor2DistanzPID.SetMode(AUTOMATIC);
     }
     else{
+      DistanzMotor2 = 0;
       bitWrite(modeRegister, 1, 0);
     }
-
-    Motor1DistanzPID.SetOutputLimits(6, MaxMotorSpeed);
-    Motor2DistanzPID.SetOutputLimits(6, MaxMotorSpeed);
-    
-    Motor1DistanzPID.SetMode(AUTOMATIC);
-    Motor2DistanzPID.SetMode(AUTOMATIC);
+    MaxMotorSpeedDelta = MaxMotorSpeed - MinMotorSpeed;
   }
-  
-  GetMovedDistance();
-  GetSensorDistances();
 
   if(MotorBusy){
+    
+    Distancebuffer = min(MinFrontDistanceRight, MinFrontDistanceLeft);
+    
+    if (DistanzMotor1 == DistanzMotor2){
+      //Vorwärts fahren
+      Distancebuffer = Distancebuffer / DeltaDistanceToObject;
+      if (FrontRightBlock || FrontLeftBlock){
+        ResetMovementDistanze();    
+      }
+      else{
+        CalculatedMaxMotorSpeed = Distancebuffer * MaxMotorSpeedDelta;
+      }
+    }
+    else if ((DistanzMotor1 > DistanzMotor2)){
+      //Linkskurve
+      Distancebuffer = min(Distancebuffer, MinBackDistanceRight);
+      Distancebuffer = Distancebuffer / DeltaDistanceToObject;
+      if (FrontRightBlock || FrontLeftBlock || BackRightBlock){
+        ResetMovementDistanze();    
+      }
+      else{
+        CalculatedMaxMotorSpeed = Distancebuffer * MaxMotorSpeedDelta;
+      }
+    }
+    else {
+      //Rechtskurve
+      Distancebuffer = min(Distancebuffer, MinBackDistanceLeft);
+      Distancebuffer = Distancebuffer / DeltaDistanceToObject;
+      if (FrontRightBlock || FrontLeftBlock || BackLeftBlock){
+        ResetMovementDistanze();    
+      }
+      else{
+        CalculatedMaxMotorSpeed = Distancebuffer * MaxMotorSpeedDelta;
+      }
+    }
+    
+    Motor1DistanzPID.SetOutputLimits(8, CalculatedMaxMotorSpeed);
+    Motor2DistanzPID.SetOutputLimits(8, CalculatedMaxMotorSpeed);
+
     MotorDistanz1Error = DistanzMotor1 - Motor1Moved;
     MotorDistanz2Error = DistanzMotor2 - Motor2Moved;
 
@@ -536,27 +692,15 @@ void loop(){
       Motor2SpeedDouble = 0;
       bitWrite(modeRegister, 1, 0);
     }
-
-    if ((MotorDistanz1Error < 1) && (MotorDistanz2Error < 1)){
-      MotorBusy = false;
-    }
     
-//    Serial.print(Motor1Moved);
-//    Serial.print(" - ");
-//    Serial.print(Motor1SpeedDouble);
-//    Serial.print(" - "); 
-//    Serial.print(DistanzMotor1);
-//    Serial.print(" - ");
-//    Serial.print(Motor2Moved);
-//    Serial.print(" - ");
-//    Serial.print(Motor2SpeedDouble);
-//    Serial.print(" - ");
-//    Serial.println(DistanzMotor2);
-//    
     Motor1DistanzPID.Compute();
     Motor1Speed = byte(Motor1SpeedDouble);
     Motor2DistanzPID.Compute();
     Motor2Speed = byte(Motor2SpeedDouble);
+    
+    if ((MotorDistanz1Error < 1) && (MotorDistanz2Error < 1)){
+      ResetMovementDistanze();    
+    }
   }
   
   delayMicroseconds(20);
