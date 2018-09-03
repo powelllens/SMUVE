@@ -225,25 +225,13 @@ void loop(){
   if(zeroA || zeroB || zeroC || zeroD){
     changeModeConfig();  //call the function to make your changes
     #if Debug
-    Serial.print(modeRegister);
-    Serial.print("+");
-    Serial.print(Motor1Speed);
-    Serial.print("-");
-    Serial.print(MotorRechts.MotorSensorSpeed);
-    Serial.print("-");
-    Serial.print(MotorRechts.MotorSensorCurrent);
-    Serial.print("-");
-    Serial.print(MotorRechts.MotorMoved);
-    Serial.print("+");
-    Serial.print(Motor2Speed);
-    Serial.print("-");
-    Serial.print(MotorLinks.MotorSensorSpeed);
-    Serial.print("-");
-    Serial.print(MotorLinks.MotorSensorCurrent);
-    Serial.print("-");
-    Serial.print(MotorLinks.MotorMoved);
-    Serial.print("+");
-    Serial.println(MotorMaxCurrent);
+    Serial.print(MotorRechts._SpeedIntegralMotor);
+    Serial.print(" - ");
+    Serial.print(int(MotorRechts._MotorSpeedInput));
+    Serial.print(" - ");
+    Serial.print(MotorRechts._MotorSpeedOutput);
+    Serial.print(" - ");
+    Serial.println(MotorRechts.MotorSensorCurrent);
     #endif
   }
   

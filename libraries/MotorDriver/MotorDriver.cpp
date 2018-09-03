@@ -126,11 +126,20 @@ void MotorDriver::ReadMotorSensorSpeed(){
       _MotorSensorTimeOld = _MotorSensorTimeNew;
       MotorSensorSpeed = 0;
       if (*_MotorEnabled){
-        _SpeedIntegralMotor = _SpeedIntegralMotor + int(_MotorSpeedInput);
-        if (_SpeedIntegralMotor > 2000){
+        if ((_MotorSpeedOutput > 30.0) && (MotorSensorCurrent > 20.0)){
+          _SpeedIntegralMotor = _SpeedIntegralMotor + int(_MotorSpeedOutput);
+          if (_SpeedIntegralMotor > 500){
+            *_MotorError = true;
+            *_MotorEnabled = false;
+          }
+        }
+        else if ((_MotorSpeedOutput > 30.0) && (MotorSensorCurrent < 20.0)){
           *_MotorError = true;
           *_MotorEnabled = false;
         }
+      }
+      else{
+        _SpeedIntegralMotor = 0;
       }
     }
   }

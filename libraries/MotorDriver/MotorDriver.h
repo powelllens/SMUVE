@@ -31,6 +31,9 @@ class MotorDriver
 
     void CalcCorrectionFactors(double);
 
+    //double *_MotorSpeedInput;
+    //double _MotorSpeedOutput;
+    //word _SpeedIntegralMotor;
   private:
     // I/O's
     double *_MotorSpeedInput;
