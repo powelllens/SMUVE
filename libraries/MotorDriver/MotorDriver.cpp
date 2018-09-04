@@ -70,7 +70,7 @@ MotorDriver::MotorDriver(
   digitalWrite(_MotorOutputBPin,   LOW);
 
   _MotorSpeedPID.SetSampleTime(10);
-  _MotorCurrentPID.SetSampleTime(100);
+  _MotorCurrentPID.SetSampleTime(10);
 
   _MotorCurrentPID.SetMode(AUTOMATIC);
   //_MotorCurrentPID.SetMode(MANUAL);
@@ -118,7 +118,6 @@ void MotorDriver::ReadMotorSensorSpeed(){
     else{
       MotorSensorSpeed = MotorSensorSpeed * _SpeedCorrectionFactorLow;
     }
-    _SpeedIntegralMotor = 0;
     ++MotorMoved;
   }
   else{
@@ -127,8 +126,8 @@ void MotorDriver::ReadMotorSensorSpeed(){
       MotorSensorSpeed = 0;
       if (*_MotorEnabled){
         if ((_MotorSpeedOutput > 30.0) && (MotorSensorCurrent > 20.0)){
-          _SpeedIntegralMotor = _SpeedIntegralMotor + int(_MotorSpeedOutput);
-          if (_SpeedIntegralMotor > 500){
+          _PowerMotor = _MotorSpeedOutput * MotorSensorCurrent;
+          if (_PowerMotor > 18000){ //Power bigger 30W (12Volt 2,5A)
             *_MotorError = true;
             *_MotorEnabled = false;
           }
@@ -137,9 +136,6 @@ void MotorDriver::ReadMotorSensorSpeed(){
           *_MotorError = true;
           *_MotorEnabled = false;
         }
-      }
-      else{
-        _SpeedIntegralMotor = 0;
       }
     }
   }
