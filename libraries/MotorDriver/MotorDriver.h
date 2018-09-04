@@ -31,12 +31,12 @@ class MotorDriver
 
     void CalcCorrectionFactors(double);
 
-    //double *_MotorSpeedInput;
-    //double _MotorSpeedOutput;
-    //word _SpeedIntegralMotor;
+    double *_MotorSpeedInput;
+    double _MotorSpeedOutput;
+    double _MotorCurrentLimiter;
   private:
     // I/O's
-    double *_MotorSpeedInput;
+    //double *_MotorSpeedInput;
     double *_MotorMaxCurrent;
     bool *_MotorError;
     bool *_MotorDirection;
@@ -44,7 +44,7 @@ class MotorDriver
 
     //PID for speed
     double Kp_S, Ki_S, Kd_S;
-    double _MotorSpeedOutput;
+    //double _MotorSpeedOutput;
 
     PID _MotorSpeedPID;
     double _SpeedCorrectionFactorHigh;
@@ -53,7 +53,7 @@ class MotorDriver
     //PID for Current
     PID _MotorCurrentPID;
     double Kp_C, Ki_C, Kd_C;
-    double _MotorCurrentLimiter;
+    //double _MotorCurrentLimiter;
 
     //All Pins
     byte _MotorEnablePin;
@@ -76,8 +76,8 @@ class MotorDriver
     unsigned long _MotorSensorTimeNew;
     unsigned long _MotorSensorTimeOld;
     unsigned long _MotorSensorTime;
-    word _SpeedIntegralMotor;
     bool _MotorRotationPinStatus;
+    int _PowerMotor;
 
     void SetupMotorPins();
 
