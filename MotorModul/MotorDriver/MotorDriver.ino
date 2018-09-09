@@ -6,7 +6,7 @@
 #include <avr/wdt.h>
 #include <Wire.h>
 
-#define Debug 1
+#define Debug 0
 
 //Constant Variables
 // Motorpins 1
@@ -25,7 +25,10 @@ const byte Motor2InputBPin = 10;
 const byte Motor2SensePin = A1;
 const byte Motor2RotationPin = 8;
 
+const byte MotorResetSwitchPin = A2;
+
 //Runtime Motor 1
+bool MotorResetEnabled;
 bool Motor1Error;
 bool Motor1Direction;
 double Motor1Speed; //Motorfrequenzy
@@ -42,11 +45,11 @@ const double Kp_s = 2.0;
 const double Ki_s = 12.0;
 const double Kd_s = 0.04;
 
-const double Kp_a = 1.5;
-const double Ki_a = 3.5;
-const double Kd_a = 0.0;
+const double Kp_a = 0.02;
+const double Ki_a = 0.4;
+const double Kd_a = 0.01;
 
-double MotorMaxCurrent = 100;
+double MotorMaxCurrent = 255;
 
 MotorDriver MotorRechts(55.9, Kp_s, Ki_s, Kd_s, Kp_a, Ki_a, Kd_a, &Motor1Speed, &MotorMaxCurrent, &Motor1Error, &Motor1Direction, &Motor1Enabled, Motor1EnablePin, Motor1PWMPin, Motor1InputAPin, Motor1InputBPin, Motor1SensePin, Motor1RotationPin);
 MotorDriver  MotorLinks(58.6, Kp_s, Ki_s, Kd_s, Kp_a, Ki_a, Kd_a, &Motor2Speed, &MotorMaxCurrent, &Motor2Error, &Motor2Direction, &Motor2Enabled, Motor2EnablePin, Motor2PWMPin, Motor2InputAPin, Motor2InputBPin, Motor2SensePin, Motor2RotationPin);
@@ -216,37 +219,55 @@ void setup() {
   Motor1Speed = 0;
   Motor2Speed = 0;
   MotorMaxCurrent = 0;
-  MotorERROR = false;
-  
+
+  pinMode(MotorResetSwitchPin,   INPUT);
+  digitalWrite(MotorResetSwitchPin, HIGH);
+
+  if (digitalRead(MotorResetSwitchPin)) {
+    MotorERROR = true;
+    MotorResetEnabled = true;
+  }
+  else {
+    MotorERROR = false;
+    MotorResetEnabled = false;
+  }
 #if Debug
-  Serial.print("MotorRechts.MotorSensorSpeed");
-  Serial.print(";");
+  //  Serial.print("MotorRechts.MotorSensorSpeed");
+  //  Serial.print(";");
   Serial.print("Motor1Speed");
   Serial.print(";");
-  Serial.print("MotorRechts._MotorSpeedOutput");
-  Serial.print(";");
-  Serial.print("MotorRechts.MotorSensorCurrent");
-  Serial.print(";");
-  Serial.print("MotorMaxCurrent");
-  Serial.print(";");
-  Serial.print("MotorRechts._MotorCurrentLimiter");
-  Serial.print(";");
-  Serial.print("MotorLinks.MotorSensorSpeed");
-  Serial.print(";");
-  Serial.print("Motor2Speed");
-  Serial.print(";");
-  Serial.print("MotorLinks._MotorSpeedOutput");
-  Serial.print(";");
-  Serial.print("MotorLinks.MotorSensorCurrent");
-  Serial.print(";");
-  Serial.print("MotorMaxCurrent");
-  Serial.print(";");
-  Serial.println("MotorLinks._MotorCurrentLimiter");
+  //  Serial.print("MotorRechts._MotorSpeedOutput");
+  //  Serial.print(";");
+  //  Serial.print("MotorRechts.MotorSensorCurrent");
+  //  Serial.print(";");
+  //  Serial.print("MotorMaxCurrent");
+  //  Serial.print(";");
+  //  Serial.println("MotorRechts._MotorCurrentLimiter");
+  //  Serial.print(";");
+  //  Serial.print("MotorLinks.MotorSensorSpeed");
+  //  Serial.print(";");
+  Serial.println("Motor2Speed");
+  //  Serial.print(";");
+  //  Serial.print("MotorLinks._MotorSpeedOutput");
+  //  Serial.print(";");
+  //  Serial.print("MotorLinks.MotorSensorCurrent");
+  //  Serial.print(";");
+  //  Serial.print("MotorMaxCurrent");
+  //  Serial.print(";");
+  //  Serial.println("MotorLinks._MotorCurrentLimiter");
 #endif
-  
+
 }
 
 void loop() {
+
+#if Debug
+
+  Serial.print(Motor1Speed);
+  Serial.print(";");
+  Serial.println(Motor2Speed);
+
+#endif
 
   if (Motor1Error || Motor2Error) {
     MotorERROR = true;
@@ -256,35 +277,26 @@ void loop() {
     Motor2Speed = 0;
   }
 
+  if (digitalRead(MotorResetSwitchPin)) {
+    MotorERROR = true;
+    MotorResetEnabled = true;
+    Motor1Enabled = false;
+    Motor2Enabled = false;
+    Motor1Speed = 0;
+    Motor2Speed = 0;
+  }
+  else {
+    if (MotorResetEnabled) {
+      MotorERROR = false;
+      MotorResetEnabled = false;
+      Motor1Error = false;
+      Motor2Error = false;
+    }
+  }
+
   if (zeroA || zeroB || zeroC || zeroD) {
     changeModeConfig();  //call the function to make your changes
   }
-
-#if Debug
-  Serial.print(MotorRechts.MotorSensorSpeed);
-  Serial.print(";");
-  Serial.print(Motor1Speed);
-  Serial.print(";");
-  Serial.print(MotorRechts._MotorSpeedOutput);
-  Serial.print(";");
-  Serial.print(MotorRechts.MotorSensorCurrent);
-  Serial.print(";");
-  Serial.print(MotorMaxCurrent);
-  Serial.print(";");
-  Serial.print(MotorRechts._MotorCurrentLimiter);
-  Serial.print(";");
-  Serial.print(MotorLinks.MotorSensorSpeed);
-  Serial.print(";");
-  Serial.print(Motor2Speed);
-  Serial.print(";");
-  Serial.print(MotorLinks._MotorSpeedOutput);
-  Serial.print(";");
-  Serial.print(MotorLinks.MotorSensorCurrent);
-  Serial.print(";");
-  Serial.print(MotorMaxCurrent);
-  Serial.print(";");
-  Serial.println(MotorLinks._MotorCurrentLimiter);
-#endif
 
   storeData();
 

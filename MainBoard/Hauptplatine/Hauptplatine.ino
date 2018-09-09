@@ -1,6 +1,3 @@
-/*
-
-*/
 
 #include <avr/wdt.h>
 byte MainBoardMode = 0;
@@ -61,23 +58,22 @@ byte receivedCommands[MAX_RECIEVE_BYTES];
 // Stuff needed for Ultrasonic Modul
 #define ULTRASONIC_ADDRESS  0x09
 byte MinFrontDistance;
-byte MinBackDistance;
+byte MinRightDistance;
+byte MinLeftDistance;
 
-bool DistanceFrontBlock;
-bool FrontRightBlock;
-bool FrontLeftBlock;
-
-bool BackRightBlock;
-bool BackLeftBlock;
+bool FrontBlock;
+bool RightBlock;
+bool LeftBlock;
 
 const int MinMotorSpeed = 12;
 const byte SmallestDistanceToMove = 10; //Pulse
-const byte SmallestDistanceToObjectFront = 30; //cm
-const byte SmallestDistanceToObjectforAngledSensors = 100; //cm
-const byte MaxDistanceToObject = 160; //cm
+const byte SmallestDistanceToObjectFront = 60; //cm
+const byte SmallestDistanceToObjectforAngledSensors = 60; //cm
+const byte MaxDistanceToObject = 150; //cm
 const int DeltaDistanceToObject = MaxDistanceToObject - SmallestDistanceToObjectFront; //cm
 double Distancebuffer;
 double DistanceSpeedFactor;
+byte DrivingDirection;
 
 //**********************************************************************************************
 // Stuff needed for Motor Modul
@@ -218,8 +214,10 @@ void PS3Mode4getActions() {
     Motor2Direction = not Motor2Direction;
   }
 
-  Motor1Speed = int(PS3.getAnalogButton(R2)) / Speeddivider;
-  Motor2Speed = int(PS3.getAnalogButton(L2)) / Speeddivider;
+  Motor1Speed = int(PS3.getAnalogButton(R2));
+  Motor1Speed = Motor1Speed / Speeddivider;
+  Motor2Speed = int(PS3.getAnalogButton(L2));
+  Motor2Speed = Motor2Speed / Speeddivider;
 }
 
 //**********************************************************************************************
@@ -240,6 +238,17 @@ void GetSensorDistances() {
     receivedCommands[a] = Wire.read(); // receive a byte as character
     a++;
   }
+  //  for (int c = 0; c < 9; c++) {
+  //    if (receivedCommands[c] < 10){
+  //      Serial.print("00");
+  //    }
+  //    else if (receivedCommands[c] < 100){
+  //      Serial.print("0");
+  //    }
+  //    Serial.print(receivedCommands[c]);
+  //    Serial.print(" ");
+  //  }
+  //  Serial.println(receivedCommands[9]);
 
   //First 0-3 are front sensors
   MinFrontDistance = receivedCommands[0];
@@ -249,26 +258,28 @@ void GetSensorDistances() {
     }
   }
 
-  //4-5 Light
+  //  //4-5 Light
   if (min(receivedCommands[4], receivedCommands[5]) < SmallestDistanceToObjectforAngledSensors) {
-    DistanceFrontBlock = true;
+    FrontBlock = true;
+  }
+  else if (MinFrontDistance < SmallestDistanceToObjectFront) {
+    FrontBlock = true;
   }
   else {
-    DistanceFrontBlock = false;
+    FrontBlock = false;
   }
 
   // All Sesnors in the Back 6-9
-  MinBackDistance = receivedCommands[6];
-  for (int c = 7; c < 10; c++) {
-    if (receivedCommands[c] < MinBackDistance) {
-      MinBackDistance = receivedCommands[c];
-    }
-  }
+  MinLeftDistance = min(receivedCommands[5], receivedCommands[6]);
+  MinLeftDistance = min(receivedCommands[8], MinLeftDistance);
+
+  MinRightDistance = min(receivedCommands[4], receivedCommands[7]);
+  MinRightDistance = min(receivedCommands[9], MinRightDistance);
 
   /*
 
-       / | |   | | \
-       4 0 1 | 2 3 5
+       \ / |   | \ /
+       0 4 1 | 2 5 3
        *************
      /7*           *6\
        *           *
@@ -281,21 +292,19 @@ void GetSensorDistances() {
 
   */
 
-  if (MinBackDistance < SmallestDistanceToObjectforAngledSensors) {
-    BackLeftBlock = true;
+  if (MinRightDistance < SmallestDistanceToObjectforAngledSensors) {
+    RightBlock = true;
   }
   else {
-    BackLeftBlock = false;
+    RightBlock = false;
   }
-  BackRightBlock = BackLeftBlock;
 
-  if ((MinFrontDistance < SmallestDistanceToObjectFront) || DistanceFrontBlock) {
-    FrontLeftBlock = true;
+  if (MinLeftDistance < SmallestDistanceToObjectforAngledSensors) {
+    LeftBlock = true;
   }
   else {
-    FrontLeftBlock = false;
+    LeftBlock = false;
   }
-  FrontRightBlock = FrontLeftBlock;
 }
 
 //**********************************************************************************************
@@ -645,15 +654,13 @@ void loop() {
         Serial.print(MotorBusy);
         Serial.print(";");
 
-        //Block Motor 1
-        Serial.print(FrontLeftBlock);
+        //Block
+        Serial.print(LeftBlock);
         Serial.print(";");
-        Serial.print(FrontRightBlock);
+        Serial.print(FrontBlock);
         Serial.print(";");
-        //Block Motor 2
-        Serial.print(BackLeftBlock);
-        Serial.print(";");
-        Serial.println(BackRightBlock);
+        Serial.println(RightBlock);
+
         break;
         return;
       case 0x52: // R
@@ -701,45 +708,73 @@ void loop() {
     MaxMotorSpeedDelta = MaxMotorSpeed - MinMotorSpeed;
     // 0,1153 = 15 / 130
     DistanceSpeedFactor = (double)MaxMotorSpeedDelta / DeltaDistanceToObject;
+
+//    Serial.print(Motor1Direction);
+//    Serial.print(" ");
+//    Serial.print(Motor2Direction);
+//    Serial.print(" ");
+//    Serial.print(DistanzMotor1);
+//    Serial.print(" ");
+//    Serial.println(DistanzMotor2);
+
+
+    
+    if (((Motor1Direction == 0) && (Motor2Direction == 0) && (DistanzMotor1 == DistanzMotor2)) || ((Motor1Direction == 1) && (Motor2Direction == 0) && (DistanzMotor1 < DistanzMotor2))) {
+      //Rechtskurve
+      DrivingDirection = 1;
+      //Serial.println("Right");
+    }
+    else if (((Motor1Direction == 1) && (Motor2Direction == 1) && (DistanzMotor1 == DistanzMotor2)) || ((Motor1Direction == 1) && (Motor2Direction == 0) && (DistanzMotor1 > DistanzMotor2))) {
+      //Linkskurve
+      DrivingDirection = 2;
+      //Serial.println("Left");
+    }
+    else {
+      //Vorwaerts
+      DrivingDirection = 0;
+      //Serial.println("Front");    
+    }
   }
 
+   Usb.Task();
+  
   if (MotorBusy) {
 
     Distancebuffer = MinFrontDistance;
+    Distancebuffer = (Distancebuffer - 30) * DistanceSpeedFactor;
 
-    if (DistanzMotor1 == DistanzMotor2) {
-      //VorwÃ¤rts fahren
-      Distancebuffer = (Distancebuffer - 30) * DistanceSpeedFactor;
-      if (FrontRightBlock || DistanceFrontBlock) {
-        ResetMovementDistanze();
-      }
-      else {
-        CalculatedMaxMotorSpeed = Distancebuffer + MinMotorSpeed;
-      }
+    switch (DrivingDirection) {
+      case 0:
+        //VorwÃ¤rts fahren
+        if (FrontBlock) {
+          ResetMovementDistanze();
+//          Serial.println("FrontBlock");
+        }
+        else {
+          CalculatedMaxMotorSpeed = Distancebuffer + MinMotorSpeed;
+        }
+        break;
+      case 1:
+        //Rechtskurve
+        if (RightBlock) {
+          ResetMovementDistanze();
+ //         Serial.println("RightBlock");
+        }
+        else {
+          CalculatedMaxMotorSpeed = Distancebuffer + MinMotorSpeed;
+        }
+        break;
+      case 2:
+        //Linkskurve
+        if (LeftBlock) {
+          ResetMovementDistanze();
+ //         Serial.println("LeftBlock");
+        }
+        else {
+          CalculatedMaxMotorSpeed = Distancebuffer + MinMotorSpeed;
+        }
+        break;
     }
-    else if ((DistanzMotor1 > DistanzMotor2)) {
-      //Linkskurve
-      Distancebuffer = min(Distancebuffer, MinBackDistance);
-      Distancebuffer = (Distancebuffer - 30) * DistanceSpeedFactor;
-      if (FrontRightBlock || BackRightBlock || DistanceFrontBlock) {
-        ResetMovementDistanze();
-      }
-      else {
-        CalculatedMaxMotorSpeed = Distancebuffer + MinMotorSpeed;
-      }
-    }
-    else {
-      //Rechtskurve
-      Distancebuffer = min(Distancebuffer, MinBackDistance);
-      Distancebuffer = (Distancebuffer - 30) * DistanceSpeedFactor;
-      if (FrontRightBlock || BackRightBlock || DistanceFrontBlock) {
-        ResetMovementDistanze();
-      }
-      else {
-        CalculatedMaxMotorSpeed = Distancebuffer + MinMotorSpeed;
-      }
-    }
-
     //CalculatedMaxMotorSpeed = MaxMotorSpeed;
 
     Motor1DistanzPID.SetOutputLimits(MinMotorSpeed - 1, CalculatedMaxMotorSpeed);
@@ -787,3 +822,4 @@ void loop() {
   Wire.endTransmission();    // stop transmitting
 
 }
+

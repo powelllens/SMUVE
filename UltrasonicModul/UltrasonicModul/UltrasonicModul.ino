@@ -4,20 +4,21 @@
 
 #include <Wire.h>
 #include <avr/wdt.h>
+#include "HC_SR04.h"
 
-#define Debug 1
+#define debug 0
 
-//Constant Variables
-// Motorpins 1
-const int Ultrasonictrigger[10] = {9, 8, 7, 6, 5, 4, 3, 2, A0, A1};
-const int Ultrasonicreciever = A2;
+#define ECHO_PIN 2
+#define ECHO_INT 0
 
-//Runtime Variables
-int Ultrasonicsensor[10];
+//HC_SR04 sensor(A1, A0, A2, 3, 4, 5, 6, 7, 8, 9, ECHO_PIN, ECHO_INT, 150);
+HC_SR04 sensor(A1, A0, A2, 3, 4, 5, 6, 7, 8, 9, ECHO_PIN, ECHO_INT, 150);
+const byte Sequenz[10] = {3, 9, 1, 0, 7, 5, 4, 2, 6, 8};
 
-long duration;
-int distance[10];
-
+byte distance[10];
+byte i = 0;
+int DistanceBuffer;
+byte SensorState;
 
 /* Wire variables */
 #define SLAVE_ADDRESS   0x09
@@ -26,8 +27,6 @@ int distance[10];
 
 /********* Global  Variables  ***********/
 bool newDataAvailable;
-byte zeroA, zeroB;
-byte zeroAData, zeroBData;
 
 byte registerMap[REG_MAP_SIZE];
 byte registerMapTemp[REG_MAP_SIZE - 1];
@@ -71,48 +70,51 @@ void storeData() {
 }
 
 void setup() {
-  pinMode(12, OUTPUT);
   wdt_enable(WDTO_1S);
-
   Serial.begin(115200);
+
+  sensor.begin();
 
   Wire.begin(SLAVE_ADDRESS);    // join i2c bus with address #8
   Wire.onReceive(receiveEvent); // register event
   Wire.onRequest(requestEvent);
   Wire.setClock(400000);
 
-  // set the digital pin as output:
-  for (int i = 0; i <= 9; i++) {
-    pinMode(Ultrasonictrigger[i],  OUTPUT);
-    digitalWrite(Ultrasonictrigger[i], LOW);
-  }
-  pinMode(Ultrasonicreciever,  INPUT);
+  sensor.start(Sequenz[i]);
+
 }
 
 void loop() {
-  // Sets the trigPin on HIGH state for 10 micro seconds
-  for (int i = 0; i <= 9; i++) {
-    digitalWrite(Ultrasonictrigger[i], HIGH);
-    delayMicroseconds(5);
-    digitalWrite(Ultrasonictrigger[i], LOW);
-    // Reads the echoPin, returns the sound wave travel time in microseconds
-    duration = pulseIn(Ultrasonicreciever, HIGH, 15000);
-    if (duration == 0 || duration > 9412) {
-      duration = 9412;
+
+  SensorState = sensor.isFinished();
+  if (SensorState > 0) {
+    DistanceBuffer = sensor.getRange();
+    if (SensorState > 1) {
+      DistanceBuffer = 150;
     }
-    // Calculating the distance
-    distance[i] = (duration * 0.034) / 2;
-#if Debug
-    if (i == 9) {
-      Serial.print(distance[i]);
-      Serial.print(" - ");
-    }
-    else {
-      Serial.println(distance[i]);
-    }
+    distance[Sequenz[i]] = DistanceBuffer;
+    i++;
+    if (i > 9) {
+      i = 0;
+#if debug
+      for (int c = 0; c < 9; c++) {
+        if (distance[c] < 10) {
+          Serial.print("00");
+        }
+        else if (distance[c] < 100) {
+          Serial.print("0");
+        }
+        Serial.print(distance[c]);
+        Serial.print(" ");
+      }
+      Serial.println(distance[9]);
 #endif
+    }
+    sensor.start(Sequenz[i]);
   }
+  delay(1);
 
   storeData();
   newDataAvailable = 1;
 }
+

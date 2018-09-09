@@ -39,18 +39,18 @@ MotorDriver::MotorDriver(
     _MotorOutputBPin = MotorOutputBPin;
     _MotorCurrentSensorPin = MotorCurrentSensorPin;
     _MotorRotationSensorPin = MotorRotationSensorPin;
+/*
+    _Kp_S=Kp_S;
+    _Ki_S=Ki_S;
+    _Kd_S=0.02;
 
-    //Kp_S=2;
-    //Ki_S=12;
-    //Kd_S=0.02;
+    _Kp_C=2;
+    _Ki_C=3;
+    _Kd_C=0;
 
-    //Kp_C=2;
-    //Ki_C=3;
-    //Kd_C=0;
-
-    //_MotorSpeedPID.SetTunings(Kp_S, Ki_S, Kd_S);
-    //_MotorCurrentPID.SetTunings(Kp_C, Ki_C, Kd_C);
-
+    _MotorSpeedPID.SetTunings(Kp_S, Ki_S, Kd_S);
+    _MotorCurrentPID.SetTunings(Kp_C, Ki_C, Kd_C);
+*/
     MotorDriver::CalcCorrectionFactors(HighPhasepercentage);
 
   // set the digital pin as output:
@@ -70,8 +70,9 @@ MotorDriver::MotorDriver(
   digitalWrite(_MotorOutputBPin,   LOW);
 
   _MotorSpeedPID.SetSampleTime(10);
-  _MotorCurrentPID.SetSampleTime(10);
+  _MotorCurrentPID.SetSampleTime(100);
 
+  _MotorCurrentPID.SetOutputLimits(0,254);
   _MotorCurrentPID.SetMode(AUTOMATIC);
   //_MotorCurrentPID.SetMode(MANUAL);
 
@@ -126,8 +127,8 @@ void MotorDriver::ReadMotorSensorSpeed(){
       MotorSensorSpeed = 0;
       if (*_MotorEnabled){
         if ((_MotorSpeedOutput > 30.0) && (MotorSensorCurrent > 20.0)){
-          _PowerMotor = _MotorSpeedOutput * MotorSensorCurrent;
-          if (_PowerMotor > 18000){ //Power bigger 30W (12Volt 2,5A)
+          _MotorSpeedIntegral = _MotorSpeedOutput + _MotorSpeedIntegral;
+          if (_MotorSpeedIntegral > 800){
             *_MotorError = true;
             *_MotorEnabled = false;
           }
@@ -136,6 +137,9 @@ void MotorDriver::ReadMotorSensorSpeed(){
           *_MotorError = true;
           *_MotorEnabled = false;
         }
+      }
+      else{
+        _MotorSpeedIntegral = 0;
       }
     }
   }
@@ -177,7 +181,7 @@ byte MotorDriver::ComputeMotorOutputs(){
   MotorDriver::ReadMotorSensorSpeed();
 
   _MotorCurrentPID.Compute();
-  _MotorSpeedPID.SetOutputLimits(0, _MotorCurrentLimiter);
+  _MotorSpeedPID.SetOutputLimits(0, _MotorCurrentLimiter + 1.0);
   _MotorSpeedPID.Compute();
   return _MotorSpeedOutput;
 }

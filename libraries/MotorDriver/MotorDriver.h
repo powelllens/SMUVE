@@ -34,11 +34,12 @@ class MotorDriver
     double *_MotorSpeedInput;
     double _MotorSpeedOutput;
     double _MotorCurrentLimiter;
+    bool *_MotorError;
   private:
     // I/O's
     //double *_MotorSpeedInput;
     double *_MotorMaxCurrent;
-    bool *_MotorError;
+    //bool *_MotorError;
     bool *_MotorDirection;
     bool *_MotorEnabled;
 
@@ -77,7 +78,7 @@ class MotorDriver
     unsigned long _MotorSensorTimeOld;
     unsigned long _MotorSensorTime;
     bool _MotorRotationPinStatus;
-    int _PowerMotor;
+    int _MotorSpeedIntegral;
 
     void SetupMotorPins();
 
