@@ -112,7 +112,7 @@ void loop() {
     }
     sensor.start(Sequenz[i]);
   }
-  delay(1);
+  delay(10);
 
   storeData();
   newDataAvailable = 1;
