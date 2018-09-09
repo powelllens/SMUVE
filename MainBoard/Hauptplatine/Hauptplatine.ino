@@ -102,6 +102,9 @@ const byte MotorMaxCurrent = 0x64;
 bool MotorBusy;
 bool RecievedCommand;
 
+double MotorDistanzErrorTestOld, MotorDistanzErrorTestNew;
+unsigned long BusyTestStartTime, BusyTestEndTime;
+
 int MaxMotorSpeedDelta;
 int MaxMotorSpeed;
 int CalculatedMaxMotorSpeed;
@@ -783,18 +786,30 @@ void loop() {
     MotorDistanz1Error = DistanzMotor1 - Motor1Moved;
     MotorDistanz2Error = DistanzMotor2 - Motor2Moved;
 
-    if (MotorDistanz1Error < 1) {
+    MotorDistanzErrorTestOld = MotorDistanz1Error + MotorDistanz2Error;
+    if (MotorDistanzErrorTestOld != MotorDistanzErrorTestNew){
+      BusyTestStartTime = millis();
+      MotorDistanzErrorTestNew = MotorDistanzErrorTestOld;
+    }
+    else{
+      BusyTestEndTime = millis();
+      if ((BusyTestEndTime - BusyTestStartTime) > 1000){
+        ResetMovementDistanze();
+      }
+    }
+
+    if (MotorDistanz1Error < 2) {
       Motor1DistanzPID.SetMode(MANUAL);
       Motor1SpeedDouble = 0;
       bitWrite(modeRegister, 0, 0);
     }
-    if (MotorDistanz2Error < 1) {
+    if (MotorDistanz2Error < 2) {
       Motor2DistanzPID.SetMode(MANUAL);
       Motor2SpeedDouble = 0;
       bitWrite(modeRegister, 1, 0);
     }
 
-    if ((MotorDistanz1Error < 1) && (MotorDistanz2Error < 1)) {
+    if ((MotorDistanz1Error < 2) && (MotorDistanz2Error < 2)) {
       ResetMovementDistanze();
     }
 
